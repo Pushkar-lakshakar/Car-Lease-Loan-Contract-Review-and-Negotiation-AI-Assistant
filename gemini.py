@@ -12,25 +12,38 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
-# PROMPT
 PROMPT = """
-From the following car lease contract, extract:
+Extract all SLA-related fields present in this car lease contract.
 
-- all SLA fields present in the document,
-- a contract fairness score (0-100),
-- all red-flag clauses,
-- negotiation points,
-- a comparison with industry standards,
-- safer alternative clauses (ONLY for red-flag items).
+SLA fields include (but are not limited to):
+- Lease Term / Lease Duration
+- Start Date and End Date
+- Monthly Lease Amount
+- Payment Due Date
+- Late Fee Amount and Conditions
+- Security Deposit and Refund Rules
+- Mileage Limit (annual and total)
+- Excess Mileage Charge
+- Maintenance Responsibilities (minor/major repairs)
+- Authorized Repair Shops
+- Insurance Requirements (liability, comprehensive, deductible)
+- Early Termination Fee
+- Renewal Rules
+- Purchase Option Price and Conditions
+- Any numeric limits, thresholds, deadlines, or penalties
 
-Respond ONLY in valid JSON.
-Do NOT include explanations or any text outside JSON.
+Rules:
+- Extract EVERY SLA field you can find.
+- Output ONLY valid JSON.
+- Each SLA field must be a direct key-value pair:
+  {{ "LEASE TERM": "36 months" }}
+- Do NOT output arrays unless multiple values exist for the same field.
 
-DOCUMENT:
+CONTRACT:
 {doc_text}
 """
 
-# JSON EXTRACTOR
+# JSON extraction helper
 def extract_json_block(text: str):
     start = text.find("{")
     if start == -1:
@@ -52,12 +65,7 @@ def extract_sla_from_text(ocr_text: str) -> dict:
 
     result = client.models.generate_content(
         model="models/gemini-2.5-flash",
-        contents=[
-            {
-                "role": "user",
-                "parts": [{"text": prompt}]
-            }
-        ]
+        contents=[{"role": "user", "parts": [{"text": prompt}]}]
     )
 
     raw_output = result.text.strip()
