@@ -4,22 +4,24 @@ import json
 
 from ocr_engine import run_ocr
 from gemini import extract_sla_from_text
+from risk_analysis import analyze_contract
 
-app = FastAPI(title="Car Lease SLA Extraction API (Auto-run)")
+app = FastAPI(title="Car Lease SLA + Risk Analysis API")
 
 
-#ENDPOINT: Upload PDF → OCR → Gemini → SLA JSON
+# ENDPOINT: Upload PDF → OCR → Gemini → SLA JSON → Risk Analysis
 @app.post("/extract-sla")
 async def extract_sla(file: UploadFile = File(...)):
     """
-    Upload a PDF, and this endpoint will:
-    1. Save the PDF
-    2. Run OCR to extract text
-    3. Run Gemini to extract SLA JSON
-    4. Return the final JSON
+    Pipeline:
+    1. Save PDF
+    2. OCR to text
+    3. Gemini → SLA JSON only
+    4. Risk Analysis → fairness + red flags
+    5. Combine & return
     """
 
-    # 1. Save the uploaded PDF
+    # 1. Save PDF
     pdf_path = file.filename
     with open(pdf_path, "wb") as f:
         f.write(await file.read())
@@ -30,12 +32,23 @@ async def extract_sla(file: UploadFile = File(...)):
     with open(txt_path, "r", encoding="utf-8") as f:
         ocr_text = f.read()
 
-    # 3. LLM → SLA JSON
+    # 3. Extract SLA using Gemini
     sla_json = extract_sla_from_text(ocr_text)
 
-    # 4. Save JSON next to PDF
+    # 4. Risk analysis (no LLM)
+    risk_result = analyze_contract(sla_json)
+
+    # 5. Combine outputs
+    final_output = {
+        "sla_fields": sla_json,
+        "contract_fairness_score": risk_result["contract_fairness_score"],
+        "red_flag_clauses": risk_result["red_flag_clauses"],
+        "fairness_breakdown": risk_result["fairness_breakdown"]
+    }
+
+    # 6. Save result JSON
     json_path = pdf_path.replace(".pdf", ".json")
     with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(sla_json, f, indent=4)
+        json.dump(final_output, f, indent=4)
 
-    return JSONResponse(content=sla_json)
+    return JSONResponse(content=final_output)
